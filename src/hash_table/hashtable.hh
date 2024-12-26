@@ -14,10 +14,6 @@ template <class... Ts> struct overloaded : Ts... {
 };
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 template <class Key, class Value> class HashTable {
-  using empty_t = std::monostate;
-  using value_t = std::pair<Key, Value>;
-  using collision_t = std::vector<value_t>;
-  using bucket_t = std::variant<empty_t, value_t, collision_t>;
 
 public:
   void insert(const Key &key, Value value) {
@@ -37,7 +33,7 @@ public:
         bucket);
   }
 
-  std::optional<Value> get(const Key &key) const {
+  auto get(const Key &key) const -> std::optional<Value> {
     const auto &bucket = buckets.at(hash(key));
 
     return std::visit(
@@ -58,10 +54,51 @@ public:
         bucket);
   }
 
-private:
-  std::array<bucket_t, 30> buckets{};
+  auto contains(const Key &key) -> bool { return get(key).has_value(); }
 
+  auto erase(const Key &key) -> void {
+    auto &bucket = buckets.at(hash(key));
+
+    std::visit(
+        overloaded{[&](empty_t &) { /* Nothing to do if bucket is empty */ },
+                   [&](value_t &val) {
+                     if (val.first == key) {
+                       bucket = empty_t{}; // Empty the bucket if key matches
+                     }
+                   },
+                   [&](collision_t &vec) {
+                     auto it = std::remove_if(
+                         vec.begin(), vec.end(),
+                         [&](const value_t &kvp) { return kvp.first == key; });
+                     if (it != vec.end()) {
+                       vec.erase(it, vec.end()); // Remove the key-value pair
+                       if (vec.empty()) {
+                         bucket = empty_t{}; // If the collision list is now
+                                             // empty, reset bucket
+                       }
+                     }
+                   }},
+        bucket);
+  }
+
+  HashTable() = default;
+  ~HashTable() = default;
+
+private:
+  using empty_t = std::monostate;
+  using value_t = std::pair<Key, Value>;
+  using collision_t = std::vector<value_t>;
+  using bucket_t = std::variant<empty_t, value_t, collision_t>;
+
+private:
+  std::array<bucket_t, 10> buckets{};
   std::size_t hash(const Key &key) const {
     return std::hash<Key>{}(key) % buckets.size();
   }
+
+public:
+  auto begin() -> typename decltype(buckets)::iterator {
+    return buckets.begin();
+  }
+  auto end() -> typename decltype(buckets)::iterator { return buckets.end(); }
 };

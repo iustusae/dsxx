@@ -4,7 +4,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS  ON)
 project(dsxx CXX)
 set(PROJECT_DESCRIPTION "small dsa project for me to get a job")
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_COMPILER "/usr/bin/g++")
 set(CMAKE_C_COMPILER "/usr/bin/gcc")
