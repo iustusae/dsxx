@@ -25,9 +25,13 @@ find_package(Catch2 3 REQUIRED)
 add_executable(dsxx_tests "${CMAKE_SOURCE_DIR}/tests/hashtable.cc"
 )
 
-
 target_link_libraries(dsxx_tests dsxx Catch2::Catch2WithMain)
 target_include_directories(dsxx_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/)
+
+
+add_executable(p "${CMAKE_SOURCE_DIR}/main.cc")
+target_link_libraries(p dsxx)
+target_include_directories(p PRIVATE ${CMAKE_SOURCE_DIR}/src/)
 
 
 

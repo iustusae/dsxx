@@ -84,7 +84,7 @@ public:
   HashTable() = default;
   ~HashTable() = default;
 
-private:
+public:
   using empty_t = std::monostate;
   using value_t = std::pair<Key, Value>;
   using collision_t = std::vector<value_t>;
@@ -101,4 +101,56 @@ public:
     return buckets.begin();
   }
   auto end() -> typename decltype(buckets)::iterator { return buckets.end(); }
+
+  template <class T>
+  [[nodiscard]] auto foreach (std::function<T(Key, Value)> &&predicate) const
+      -> T {
+    // Initialize a variable to hold the result (if T is not void)
+    if constexpr (!std::is_void_v<T>) {
+      T result = T(); // Default-construct the result value
+      for (const auto &bucket : buckets) {
+        std::visit(
+            overloaded{// Handle empty bucket case
+                       [&](const empty_t &) {},
+
+                       // Handle single value in the bucket
+                       [&](const value_t &kvp) {
+                         result = predicate(
+                             kvp.first,
+                             kvp.second); // Assign result if T is not void
+                       },
+
+                       // Handle collision case (multiple values)
+                       [&](const collision_t &vec) {
+                         for (const value_t &kvp : vec) {
+                           result = predicate(
+                               kvp.first, kvp.second); // Assign result for each
+                         }
+                       }},
+            bucket);
+      }
+      return result; // Return the result value
+    } else {
+      // If T is void, just perform the operation without returning anything
+      for (const auto &bucket : buckets) {
+        std::visit(
+            overloaded{// Handle empty bucket case
+                       [&](const empty_t &) {},
+
+                       // Handle single value in the bucket
+                       [&](const value_t &kvp) {
+                         predicate(kvp.first, kvp.second); // Call predicate
+                       },
+
+                       // Handle collision case (multiple values)
+                       [&](const collision_t &vec) {
+                         for (const value_t &kvp : vec) {
+                           predicate(kvp.first,
+                                     kvp.second); // Call predicate for each
+                         }
+                       }},
+            bucket);
+      }
+    }
+  }
 };
