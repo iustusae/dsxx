@@ -13,10 +13,13 @@ template <class... Ts> struct overloaded : Ts... {
   using Ts::operator()...;
 };
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
 template <class Key, class Value> class HashTable {
 
 public:
   void insert(const Key &key, Value value) {
+    if (this->contains(key))
+      return;
     auto &bucket = buckets.at(hash(key));
     auto v = std::make_pair(key, std::move(value));
 
@@ -97,60 +100,83 @@ private:
   }
 
 public:
-  auto begin() -> typename decltype(buckets)::iterator {
-    return buckets.begin();
-  }
-  auto end() -> typename decltype(buckets)::iterator { return buckets.end(); }
+  class Iterator {
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = value_t;
+    using difference_type = std::ptrdiff_t;
+    using pointer = value_type *;
+    using reference = value_type &;
 
-  template <class T>
-  [[nodiscard]] auto foreach (std::function<T(Key, Value)> &&predicate) const
-      -> T {
-    // Initialize a variable to hold the result (if T is not void)
-    if constexpr (!std::is_void_v<T>) {
-      T result = T(); // Default-construct the result value
-      for (const auto &bucket : buckets) {
-        std::visit(
-            overloaded{// Handle empty bucket case
-                       [&](const empty_t &) {},
-
-                       // Handle single value in the bucket
-                       [&](const value_t &kvp) {
-                         result = predicate(
-                             kvp.first,
-                             kvp.second); // Assign result if T is not void
-                       },
-
-                       // Handle collision case (multiple values)
-                       [&](const collision_t &vec) {
-                         for (const value_t &kvp : vec) {
-                           result = predicate(
-                               kvp.first, kvp.second); // Assign result for each
-                         }
-                       }},
-            bucket);
-      }
-      return result; // Return the result value
-    } else {
-      // If T is void, just perform the operation without returning anything
-      for (const auto &bucket : buckets) {
-        std::visit(
-            overloaded{// Handle empty bucket case
-                       [&](const empty_t &) {},
-
-                       // Handle single value in the bucket
-                       [&](const value_t &kvp) {
-                         predicate(kvp.first, kvp.second); // Call predicate
-                       },
-
-                       // Handle collision case (multiple values)
-                       [&](const collision_t &vec) {
-                         for (const value_t &kvp : vec) {
-                           predicate(kvp.first,
-                                     kvp.second); // Call predicate for each
-                         }
-                       }},
-            bucket);
+    Iterator(HashTable *table, size_t bucket_idx, size_t collision_idx = 0)
+        : table_(table), bucket_idx_(bucket_idx),
+          collision_idx_(collision_idx) {
+      if (bucket_idx_ < table_->buckets.size()) {
+        advance_to_valid();
       }
     }
-  }
+
+    value_t &operator*() {
+      auto &bucket = table_->buckets[bucket_idx_];
+      if (std::holds_alternative<value_t>(bucket)) {
+        return std::get<value_t>(bucket);
+      } else {
+        return std::get<collision_t>(bucket)[collision_idx_];
+      }
+    }
+
+    Iterator &operator++() {
+      advance();
+      return *this;
+    }
+
+    Iterator operator++(int) {
+      Iterator tmp = *this;
+      advance();
+      return tmp;
+    }
+
+    bool operator==(const Iterator &other) const {
+      return bucket_idx_ == other.bucket_idx_ &&
+             collision_idx_ == other.collision_idx_ && table_ == other.table_;
+    }
+
+    bool operator!=(const Iterator &other) const { return !(*this == other); }
+
+  private:
+    HashTable *table_;
+    size_t bucket_idx_;
+    size_t collision_idx_;
+
+    void advance() {
+      auto &bucket = table_->buckets[bucket_idx_];
+      if (std::holds_alternative<collision_t>(bucket)) {
+        if (collision_idx_ + 1 < std::get<collision_t>(bucket).size()) {
+          ++collision_idx_;
+          return;
+        }
+      }
+
+      collision_idx_ = 0;
+      ++bucket_idx_;
+      advance_to_valid();
+    }
+
+    void advance_to_valid() {
+      while (bucket_idx_ < table_->buckets.size()) {
+        auto &bucket = table_->buckets[bucket_idx_];
+        if (std::holds_alternative<value_t>(bucket) ||
+            (std::holds_alternative<collision_t>(bucket) &&
+             !std::get<collision_t>(bucket).empty())) {
+          return;
+        }
+        ++bucket_idx_;
+      }
+    }
+  };
+
+  // Iterator methods
+  Iterator begin() { return Iterator(this, 0); }
+
+  Iterator end() { return Iterator(this, buckets.size()); }
 };
